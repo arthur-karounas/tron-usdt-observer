@@ -53,3 +53,22 @@ func New(pgDSN, redisAddr, redisPassword string) (*Storage, error) {
 
 	return &Storage{db: db, rdb: rdb}, nil
 }
+
+func (s *Storage) AddWallet(address string) error {
+	wallet := TrackedWallet{Address: address}
+	return s.db.FirstOrCreate(&wallet, TrackedWallet{Address: address}).Error
+}
+
+func (s *Storage) RemoveWallet(address string) error {
+	return s.db.Where("address = ?", address).Delete(&TrackedWallet{}).Error
+}
+
+func (s *Storage) GetWallets() ([]TrackedWallet, error) {
+	var wallets []TrackedWallet
+	err := s.db.Find(&wallets).Error
+	return wallets, err
+}
+
+func (s *Storage) UpdateWalletTimestamp(address string, timestamp int64) error {
+	return s.db.Model(&TrackedWallet{}).Where("address = ?", address).Update("last_timestamp", timestamp).Error
+}
