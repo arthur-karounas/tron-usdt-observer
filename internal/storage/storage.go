@@ -93,3 +93,8 @@ func (s *Storage) GetUsers() ([]int64, error) {
 	}
 	return ids, nil
 }
+
+func (s *Storage) ProcessTransaction(ctx context.Context, txID, address string) (bool, error) {
+	key := fmt.Sprintf("seen_tx:%s", txID)
+	return s.rdb.SetNX(ctx, key, address, 7*24*time.Hour).Result()
+}
