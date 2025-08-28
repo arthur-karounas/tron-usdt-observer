@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
+	"github.com/arthur-karounas/tron-usdt-observer/internal/scanner"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
 	"go.uber.org/zap"
 )
@@ -19,7 +20,6 @@ func main() {
 	}
 
 	var db *storage.Storage
-
 	maxRetries := 5
 	for i := 1; i <= maxRetries; i++ {
 		db, err = storage.New(cfg.PgDSN, cfg.RedisAddr, cfg.RedisPassword)
@@ -35,6 +35,9 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
-	sugar.Info("Storage connections established and migrations applied")
-	_ = db // Stub
+	db.AddUser(cfg.AdminID)
+
+	_ = scanner.New(cfg, db, sugar)
+
+	sugar.Info("System initialized. Storage and Scanner are ready.")
 }
