@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -35,6 +36,35 @@ func New(cfg *config.Config, db Store, logger *zap.SugaredLogger) *Scanner {
 		client:    &http.Client{Timeout: 5 * time.Second},
 		isRunning: true,
 	}
+}
+
+func ParseAmount(raw string) float64 {
+	var amount float64
+	fmt.Sscanf(raw, "%f", &amount)
+	return amount / 1_000_000
+}
+
+func FormatNotification(address, from string, amount float64, timestamp int64, txID string) string {
+	loc, _ := time.LoadLocation("Europe/Warsaw")
+	t := time.UnixMilli(timestamp).In(loc)
+	timeStr := t.Format("02 January 2006 (15:04)")
+
+	addrTail := address
+	if len(address) > 4 {
+		addrTail = address[len(address)-4:]
+	}
+	fromTail := from
+	if len(from) > 4 {
+		fromTail = from[len(from)-4:]
+	}
+
+	return fmt.Sprintf("📥 <b>Incoming USDT Transaction</b>\n\n"+
+		"Wallet: <code>...%s</code>\n"+
+		"Sender: <code>...%s</code>\n"+
+		"Amount: <b>%.2f USDT</b>\n"+
+		"Time: %s\n\n"+
+		"<a href='https://tronscan.org/#/transaction/%s'>View Transaction</a>",
+		addrTail, fromTail, amount, timeStr, txID)
 }
 
 func (s *Scanner) SetNotifier(f func(string)) {
