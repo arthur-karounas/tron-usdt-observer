@@ -84,6 +84,61 @@ func (s *Scanner) IsRunning() bool {
 	return s.isRunning
 }
 
+func (s *Scanner) Start(ctx context.Context) {
+	ticker := time.NewTicker(time.Duration(s.cfg.PollInterval) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("Scanner stopped by context")
+			return
+		case <-ticker.C:
+			if !s.IsRunning() {
+				continue
+			}
+			s.processWallets(ctx)
+		}
+	}
+}
+
+func (s *Scanner) processWallets(ctx context.Context) {
+	wallets, err := s.db.GetWallets()
+	if err != nil || len(wallets) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, s.cfg.MaxConcurrentScans)
+
+	for _, w := range wallets {
+		if ctx.Err() != nil {
+			return
+		}
+
+		wg.Add(1)
+		go func(wallet storage.TrackedWallet) {
+			defer wg.Done()
+
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			if wallet.LastTimestamp == 0 {
+				wallet.LastTimestamp = time.Now().Add(-24 * time.Hour).UnixMilli()
+				s.db.UpdateWalletTimestamp(wallet.Address, wallet.LastTimestamp)
+			}
+
+			s.fetchAndProcessTransactions(ctx, wallet)
+		}(w)
+	}
+
+	wg.Wait()
+}
+
 func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.TrackedWallet) {
 	url := fmt.Sprintf("https://api.trongrid.io/v1/accounts/%s/transactions/trc20?limit=50&contract_address=%s&only_to=true&min_timestamp=%d",
 		w.Address, s.cfg.USDTContract, w.LastTimestamp)
