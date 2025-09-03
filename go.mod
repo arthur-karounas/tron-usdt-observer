@@ -28,6 +28,7 @@ require (
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/multierr v1.10.0 // indirect
+	gopkg.in/telebot.v3 v3.3.8
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
 )
