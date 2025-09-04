@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
@@ -73,5 +74,72 @@ func (bot *Bot) SendNotification(msg string) {
 	}
 }
 
+func (bot *Bot) adminOnly(next tele.HandlerFunc) tele.HandlerFunc {
+	return func(c tele.Context) error {
+		if c.Sender().ID != bot.cfg.AdminID {
+			return nil
+		}
+		return next(c)
+	}
+}
+
 func (bot *Bot) setupHandlers() {
+	adminGroup := bot.b.Group()
+	adminGroup.Use(bot.adminOnly)
+
+	adminGroup.Handle("/start", bot.handleStart)
+	adminGroup.Handle("/status", bot.handleStatus)
+	adminGroup.Handle("/run", bot.handleRun)
+	adminGroup.Handle("/stop", bot.handleStop)
+}
+
+func (bot *Bot) handleStart(c tele.Context) error {
+	text := "System online. Scanner controls:\n" +
+		"/run - Start scanner\n" +
+		"/stop - Stop scanner\n" +
+		"/status - View current configuration\n\n" +
+		"Management:\n" +
+		"/add_wallet <address>\n" +
+		"/del_wallet <address>\n" +
+		"/add_user <id>\n" +
+		"/del_user <id>"
+	return c.Send(text)
+}
+
+func (bot *Bot) handleRun(c tele.Context) error {
+	if bot.scanner.IsRunning() {
+		return c.Send("Scanner is already running.")
+	}
+	bot.scanner.SetRunning(true)
+	return c.Send("Scanner started.")
+}
+
+func (bot *Bot) handleStop(c tele.Context) error {
+	if !bot.scanner.IsRunning() {
+		return c.Send("Scanner is already stopped.")
+	}
+	bot.scanner.SetRunning(false)
+	return c.Send("Scanner stopped.")
+}
+
+func (bot *Bot) handleStatus(c tele.Context) error {
+	status := "Stopped 🔴"
+	if bot.scanner.IsRunning() {
+		status = "Running 🟢"
+	}
+
+	wallets, _ := bot.db.GetWallets()
+	users, _ := bot.db.GetUsers()
+
+	msg := fmt.Sprintf("<b>Scanner Status:</b> %s\n\n<b>Tracked Wallets (%d):</b>\n", status, len(wallets))
+	for _, w := range wallets {
+		msg += fmt.Sprintf("• <code>...%s</code>\n", w.Address[len(w.Address)-4:])
+	}
+
+	msg += fmt.Sprintf("\n<b>Authorized Listeners (%d):</b>\n", len(users))
+	for _, u := range users {
+		msg += fmt.Sprintf("• <code>%d</code>\n", u)
+	}
+
+	return c.Send(msg, tele.ModeHTML)
 }
