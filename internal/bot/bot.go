@@ -91,6 +91,8 @@ func (bot *Bot) setupHandlers() {
 	adminGroup.Handle("/status", bot.handleStatus)
 	adminGroup.Handle("/run", bot.handleRun)
 	adminGroup.Handle("/stop", bot.handleStop)
+	adminGroup.Handle("/add_wallet", bot.handleAddWallet)
+	adminGroup.Handle("/del_wallet", bot.handleDelWallet)
 }
 
 func (bot *Bot) handleStart(c tele.Context) error {
@@ -142,4 +144,32 @@ func (bot *Bot) handleStatus(c tele.Context) error {
 	}
 
 	return c.Send(msg, tele.ModeHTML)
+}
+
+func (bot *Bot) handleAddWallet(c tele.Context) error {
+	args := c.Args()
+	if len(args) == 0 {
+		return c.Send("Usage: /add_wallet <address>")
+	}
+
+	err := bot.db.AddWallet(args[0])
+	if err != nil {
+		return c.Send("Database error.")
+	}
+	return c.Send(fmt.Sprintf("Address added: ...%s", args[0][len(args[0])-4:]))
+}
+
+func (bot *Bot) handleDelWallet(c tele.Context) error {
+	args := c.Args()
+	if len(args) == 0 {
+		return c.Send("Usage: /del_wallet <address>")
+	}
+
+	err := bot.db.RemoveWallet(args[0])
+	if err != nil {
+		bot.logger.Errorf("Database error removing wallet: %v", err)
+		return c.Send("Database error. Could not remove wallet.")
+	}
+
+	return c.Send(fmt.Sprintf("Address removed: ...%s", args[0][len(args[0])-4:]))
 }
