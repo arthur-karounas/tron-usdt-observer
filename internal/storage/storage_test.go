@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Test deduplication logic using in-memory Redis mock
 func TestProcessTransaction_Behavour(t *testing.T) {
+	// Setup miniredis (mock)
 	mr, err := miniredis.Run()
 	require.NoError(t, err, "failed to run miniredis (mock redis)")
 	defer mr.Close()
@@ -25,11 +27,12 @@ func TestProcessTransaction_Behavour(t *testing.T) {
 
 	ctx := context.Background()
 
+	// Define test cases for transaction processing
 	type testCase struct {
 		name        string
 		txId        string
 		wallet      string
-		expected    bool
+		expected    bool // Should be marked as 'new'
 		expectedErr bool
 	}
 
@@ -44,6 +47,7 @@ func TestProcessTransaction_Behavour(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gotNew, err := s.ProcessTransaction(ctx, tt.txId, tt.wallet)
 
+			// Validate results
 			if tt.expectedErr {
 				assert.Error(t, err)
 			} else {
