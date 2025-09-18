@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -64,12 +65,16 @@ func New(pgDSN, redisAddr, redisPassword string) (*Storage, error) {
 
 // --- Wallet Management ---
 
+// AddWallet adds a new address to tracking, trimming any leading/trailing whitespace
 func (s *Storage) AddWallet(address string) error {
+	address = strings.TrimSpace(address)
 	wallet := TrackedWallet{Address: address}
 	return s.db.FirstOrCreate(&wallet, TrackedWallet{Address: address}).Error
 }
 
+// RemoveWallet removes an address from tracking, trimming any leading/trailing whitespace
 func (s *Storage) RemoveWallet(address string) error {
+	address = strings.TrimSpace(address)
 	return s.db.Where("address = ?", address).Delete(&TrackedWallet{}).Error
 }
 
@@ -80,6 +85,7 @@ func (s *Storage) GetWallets() ([]TrackedWallet, error) {
 }
 
 func (s *Storage) UpdateWalletTimestamp(address string, timestamp int64) error {
+	address = strings.TrimSpace(address)
 	return s.db.Model(&TrackedWallet{}).Where("address = ?", address).Update("last_timestamp", timestamp).Error
 }
 
