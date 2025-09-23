@@ -82,6 +82,10 @@ go test ./...
 * **Reporting System:** `/report` command to generate CSV/PDF reports
 * **Exchange Rates:** Integrate current USDT/Fiat exchange rates into notifications
 
+## 📝 License
+
+This project is licensed under the **MIT** License.
+
 ---
 
 <a name="русский"></a>
@@ -160,3 +164,7 @@ go test ./...
 * **Web-Hook Integration:** Поддержка вебхуков для повышения производительности
 * **Reporting System:** Команда `/report` для генерации отчетов в CSV/PDF
 * **Exchange Rates:** Интеграция текущих курсов USDT/Fiat в уведомления
+
+## 📝 Лицензия
+
+Этот проект распространяется под лицензией **MIT**.
