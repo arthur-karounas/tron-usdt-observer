@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -114,11 +115,17 @@ func TestScanner_ProcessWallets_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "key", r.Header.Get("TRON-PRO-API-KEY"))
 
+		parts := strings.Split(r.URL.Path, "/")
+		var addr string
+		if len(parts) > 3 {
+			addr = parts[3]
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{
 			"success": true,
 			"data": [
-				{"transaction_id": "tx123", "from": "Sender", "value": "15000000", "block_timestamp": 200}
+				{"transaction_id": "tx123_` + addr + `", "from": "Sender", "value": "15000000", "block_timestamp": 200}
 			],
 			"meta": {"at": 200}
 		}`))
@@ -144,7 +151,8 @@ func TestScanner_ProcessWallets_Success(t *testing.T) {
 
 	assert.NotZero(t, db.updated["TNewWallet"])
 	assert.Equal(t, int64(200), db.updated["TOldWallet"])
-	assert.True(t, db.txs["tx123"])
+	assert.True(t, db.txs["tx123_TNewWallet"])
+	assert.True(t, db.txs["tx123_TOldWallet"])
 
 	notifyMu.Lock()
 	assert.Len(t, notifications, 2)
