@@ -9,7 +9,7 @@ import (
 func TestParseAmount(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string // Raw value from Tron network
+		input    string
 		expected float64
 	}{
 		{"1 USDT", "1000000", 1.0},
