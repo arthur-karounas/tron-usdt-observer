@@ -8,6 +8,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // Test deduplication logic using in-memory Redis mock
@@ -56,4 +58,63 @@ func TestProcessTransaction_Behavour(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test wallet management operations using SQLite in-memory
+func TestWalletOperations(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	db.AutoMigrate(&TrackedWallet{})
+
+	s := &Storage{db: db}
+	addr := "  TAddress123  "
+
+	// Test AddWallet
+	err = s.AddWallet(addr)
+	assert.NoError(t, err)
+
+	// Test GetWallets
+	wallets, err := s.GetWallets()
+	assert.NoError(t, err)
+	assert.Len(t, wallets, 1)
+	assert.Equal(t, "TAddress123", wallets[0].Address)
+
+	// Test UpdateWalletTimestamp
+	newTS := int64(123456789)
+	err = s.UpdateWalletTimestamp("TAddress123", newTS)
+	assert.NoError(t, err)
+
+	wallets, _ = s.GetWallets()
+	assert.Equal(t, newTS, wallets[0].LastTimestamp)
+
+	// Test RemoveWallet
+	err = s.RemoveWallet("TAddress123")
+	assert.NoError(t, err)
+	wallets, _ = s.GetWallets()
+	assert.Empty(t, wallets)
+}
+
+// Test user management operations using SQLite in-memory
+func TestUserOperations(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	db.AutoMigrate(&AllowedUser{})
+
+	s := &Storage{db: db}
+	userID := int64(998877)
+
+	// Test AddUser
+	err = s.AddUser(userID)
+	assert.NoError(t, err)
+
+	// Test GetUsers
+	users, err := s.GetUsers()
+	assert.NoError(t, err)
+	assert.Contains(t, users, userID)
+
+	// Test RemoveUser
+	err = s.RemoveUser(userID)
+	assert.NoError(t, err)
+	users, _ = s.GetUsers()
+	assert.NotContains(t, users, userID)
 }
