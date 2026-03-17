@@ -1,7 +1,10 @@
 package main
 
 import (
+	"time"
+
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
+	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
 	"go.uber.org/zap"
 )
 
@@ -15,10 +18,23 @@ func main() {
 		sugar.Fatalf("Failed to load config: %v", err)
 	}
 
-	sugar.Infow("Configuration loaded successfully",
-		"admin_id", cfg.AdminID,
-		"poll_interval", cfg.PollInterval,
-	)
+	var db *storage.Storage
 
-	sugar.Info("Commit 1: Project structure and config initialized.")
+	maxRetries := 5
+	for i := 1; i <= maxRetries; i++ {
+		db, err = storage.New(cfg.PgDSN, cfg.RedisAddr, cfg.RedisPassword)
+		if err == nil {
+			break
+		}
+
+		if i == maxRetries {
+			sugar.Fatalf("Storage initialization failed after %d attempts: %v", maxRetries, err)
+		}
+
+		sugar.Warnf("Failed to connect to storage, retrying in 3s... (Attempt %d/%d): %v", i, maxRetries, err)
+		time.Sleep(3 * time.Second)
+	}
+
+	sugar.Info("Storage connections established and migrations applied")
+	_ = db // Stub
 }
