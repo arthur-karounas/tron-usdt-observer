@@ -72,3 +72,24 @@ func (s *Storage) GetWallets() ([]TrackedWallet, error) {
 func (s *Storage) UpdateWalletTimestamp(address string, timestamp int64) error {
 	return s.db.Model(&TrackedWallet{}).Where("address = ?", address).Update("last_timestamp", timestamp).Error
 }
+
+func (s *Storage) AddUser(id int64) error {
+	user := AllowedUser{TelegramID: id}
+	return s.db.FirstOrCreate(&user, AllowedUser{TelegramID: id}).Error
+}
+
+func (s *Storage) RemoveUser(id int64) error {
+	return s.db.Where("telegram_id = ?", id).Delete(&AllowedUser{}).Error
+}
+
+func (s *Storage) GetUsers() ([]int64, error) {
+	var users []AllowedUser
+	if err := s.db.Find(&users).Error; err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, u := range users {
+		ids = append(ids, u.TelegramID)
+	}
+	return ids, nil
+}
