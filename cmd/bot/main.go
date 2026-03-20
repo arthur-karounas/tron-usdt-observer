@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"sync"
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
@@ -37,7 +39,19 @@ func main() {
 
 	db.AddUser(cfg.AdminID)
 
-	_ = scanner.New(cfg, db, sugar)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	sugar.Info("System initialized. Storage and Scanner are ready.")
+	tronScanner := scanner.New(cfg, db, sugar)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tronScanner.Start(ctx)
+	}()
+
+	sugar.Info("Scanner logic online. Press Ctrl+C to exit (not graceful yet).")
+
+	select {}
 }
