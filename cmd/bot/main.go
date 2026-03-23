@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/arthur-karounas/tron-usdt-observer/internal/bot"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/scanner"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
@@ -44,6 +48,13 @@ func main() {
 
 	tronScanner := scanner.New(cfg, db, sugar)
 
+	tgBot, err := bot.New(cfg, db, tronScanner, sugar)
+	if err != nil {
+		sugar.Fatalf("Bot initialization failed: %v", err)
+	}
+
+	tronScanner.SetNotifier(tgBot.SendNotification)
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -51,7 +62,18 @@ func main() {
 		tronScanner.Start(ctx)
 	}()
 
-	sugar.Info("Scanner logic online. Press Ctrl+C to exit (not graceful yet).")
+	go tgBot.Start()
 
-	select {}
+	sugar.Info("System online. Press Ctrl+C to stop.")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	sugar.Info("Shutting down gracefully...")
+	cancel()
+	tgBot.Stop()
+
+	wg.Wait()
+	sugar.Info("Shutdown complete.")
 }

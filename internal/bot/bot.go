@@ -48,5 +48,30 @@ func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.Sugare
 	return botInst, nil
 }
 
+func (bot *Bot) Start() {
+	bot.logger.Info("Telegram bot started")
+	bot.b.Start()
+}
+
+func (bot *Bot) Stop() {
+	bot.b.Stop()
+}
+
+func (bot *Bot) SendNotification(msg string) {
+	users, err := bot.db.GetUsers()
+	if err != nil {
+		bot.logger.Errorf("Failed to get users for notification: %v", err)
+		return
+	}
+
+	for _, userID := range users {
+		user := &tele.User{ID: userID}
+		_, err := bot.b.Send(user, msg, tele.ModeHTML, tele.NoPreview)
+		if err != nil {
+			bot.logger.Errorf("Failed to send notification to %d: %v", userID, err)
+		}
+	}
+}
+
 func (bot *Bot) setupHandlers() {
 }
