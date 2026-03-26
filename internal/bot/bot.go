@@ -189,3 +189,25 @@ func (bot *Bot) handleAddUser(c tele.Context) error {
 	bot.db.AddUser(id)
 	return c.Send(fmt.Sprintf("User added: %d", id))
 }
+
+func (bot *Bot) handleDelUser(c tele.Context) error {
+	args := c.Args()
+	if len(args) == 0 {
+		return c.Send("Usage: /del_user <user_id>")
+	}
+	id, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		return c.Send("Error: user_id must be a number.")
+	}
+	if id == bot.cfg.AdminID {
+		return c.Send("Error: Cannot remove the main administrator.")
+	}
+
+	err = bot.db.RemoveUser(id)
+	if err != nil {
+		bot.logger.Errorf("Database error removing user: %v", err)
+		return c.Send("Database error. Could not remove user.")
+	}
+
+	return c.Send(fmt.Sprintf("User removed: %d", id))
+}
