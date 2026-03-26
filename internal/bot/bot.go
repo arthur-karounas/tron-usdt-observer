@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
@@ -93,6 +94,8 @@ func (bot *Bot) setupHandlers() {
 	adminGroup.Handle("/stop", bot.handleStop)
 	adminGroup.Handle("/add_wallet", bot.handleAddWallet)
 	adminGroup.Handle("/del_wallet", bot.handleDelWallet)
+	adminGroup.Handle("/add_user", bot.handleAddUser)
+	adminGroup.Handle("/del_user", bot.handleDelUser)
 }
 
 func (bot *Bot) handleStart(c tele.Context) error {
@@ -172,4 +175,17 @@ func (bot *Bot) handleDelWallet(c tele.Context) error {
 	}
 
 	return c.Send(fmt.Sprintf("Address removed: ...%s", args[0][len(args[0])-4:]))
+}
+
+func (bot *Bot) handleAddUser(c tele.Context) error {
+	args := c.Args()
+	if len(args) == 0 {
+		return c.Send("Usage: /add_user <user_id>")
+	}
+	id, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		return c.Send("Error: user_id must be a number.")
+	}
+	bot.db.AddUser(id)
+	return c.Send(fmt.Sprintf("User added: %d", id))
 }
