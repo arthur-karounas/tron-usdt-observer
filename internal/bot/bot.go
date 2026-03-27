@@ -11,6 +11,7 @@ import (
 	tele "gopkg.in/telebot.v3"
 )
 
+// External dependencies interfaces
 type Store interface {
 	GetUsers() ([]int64, error)
 	GetWallets() ([]storage.TrackedWallet, error)
@@ -25,6 +26,7 @@ type ScannerController interface {
 	IsRunning() bool
 }
 
+// Bot represents the Telegram controller
 type Bot struct {
 	b       *tele.Bot
 	db      Store
@@ -33,6 +35,7 @@ type Bot struct {
 	cfg     *config.Config
 }
 
+// New creates and configures a new Bot instance
 func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.SugaredLogger) (*Bot, error) {
 	pref := tele.Settings{
 		Token:  cfg.BotToken,
@@ -50,6 +53,7 @@ func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.Sugare
 	return botInst, nil
 }
 
+// Lifecycle management
 func (bot *Bot) Start() {
 	bot.logger.Info("Telegram bot started")
 	bot.b.Start()
@@ -59,6 +63,7 @@ func (bot *Bot) Stop() {
 	bot.b.Stop()
 }
 
+// Broadcast notifications to all authorized users
 func (bot *Bot) SendNotification(msg string) {
 	users, err := bot.db.GetUsers()
 	if err != nil {
@@ -75,6 +80,7 @@ func (bot *Bot) SendNotification(msg string) {
 	}
 }
 
+// Middleware: restrict access to admin only
 func (bot *Bot) adminOnly(next tele.HandlerFunc) tele.HandlerFunc {
 	return func(c tele.Context) error {
 		if c.Sender().ID != bot.cfg.AdminID {
@@ -84,6 +90,7 @@ func (bot *Bot) adminOnly(next tele.HandlerFunc) tele.HandlerFunc {
 	}
 }
 
+// Define command routes and middleware
 func (bot *Bot) setupHandlers() {
 	adminGroup := bot.b.Group()
 	adminGroup.Use(bot.adminOnly)
@@ -97,6 +104,8 @@ func (bot *Bot) setupHandlers() {
 	adminGroup.Handle("/add_user", bot.handleAddUser)
 	adminGroup.Handle("/del_user", bot.handleDelUser)
 }
+
+// --- Command Handlers ---
 
 func (bot *Bot) handleStart(c tele.Context) error {
 	text := "System online. Scanner controls:\n" +
@@ -149,6 +158,8 @@ func (bot *Bot) handleStatus(c tele.Context) error {
 	return c.Send(msg, tele.ModeHTML)
 }
 
+// --- Wallet Management ---
+
 func (bot *Bot) handleAddWallet(c tele.Context) error {
 	args := c.Args()
 	if len(args) == 0 {
@@ -176,6 +187,8 @@ func (bot *Bot) handleDelWallet(c tele.Context) error {
 
 	return c.Send(fmt.Sprintf("Address removed: ...%s", args[0][len(args[0])-4:]))
 }
+
+// --- User Management ---
 
 func (bot *Bot) handleAddUser(c tele.Context) error {
 	args := c.Args()
