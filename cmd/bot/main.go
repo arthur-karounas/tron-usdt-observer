@@ -16,15 +16,18 @@ import (
 )
 
 func main() {
+	// Initialize logger
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 	sugar := logger.Sugar()
 
+	// Load environment configuration
 	cfg, err := config.Load()
 	if err != nil {
 		sugar.Fatalf("Failed to load config: %v", err)
 	}
 
+	// Initialize storage with retry logic
 	var db *storage.Storage
 	maxRetries := 5
 	for i := 1; i <= maxRetries; i++ {
@@ -41,20 +44,22 @@ func main() {
 		time.Sleep(3 * time.Second)
 	}
 
+	// Setup initial data and context
 	db.AddUser(cfg.AdminID)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Initialize core components (Scanner & Bot)
 	tronScanner := scanner.New(cfg, db, sugar)
-
 	tgBot, err := bot.New(cfg, db, tronScanner, sugar)
 	if err != nil {
 		sugar.Fatalf("Bot initialization failed: %v", err)
 	}
 
+	// Link scanner to bot notifications
 	tronScanner.SetNotifier(tgBot.SendNotification)
 
+	// Run scanner in background
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -62,10 +67,11 @@ func main() {
 		tronScanner.Start(ctx)
 	}()
 
+	// Start Telegram bot
 	go tgBot.Start()
-
 	sugar.Info("System online. Press Ctrl+C to stop.")
 
+	// Graceful shutdown handling
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
