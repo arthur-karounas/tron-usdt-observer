@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: tron-usdt-observer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_ID=${ADMIN_ID}
+      - TRON_API_KEY=${TRON_API_KEY}
+      - POLL_INTERVAL=15
+      - TZ=Europe/Berlin
+      - PG_DSN=host=postgres user=bot_user password=bot_pass dbname=tron_db port=5432 sslmode=disable
+      - REDIS_ADDR=redis:6379
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: tron-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=bot_user
+      - POSTGRES_PASSWORD=bot_pass
+      - POSTGRES_DB=tron_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot_user -d tron_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tron-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:
