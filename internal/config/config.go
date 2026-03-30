@@ -6,6 +6,7 @@ import (
 	"strconv"
 )
 
+// Config holds all environment-based application settings
 type Config struct {
 	BotToken           string
 	AdminID            int64
@@ -18,7 +19,9 @@ type Config struct {
 	RedisPassword      string
 }
 
+// Load fetches configuration from environment variables
 func Load() (*Config, error) {
+	// Mandatory: Telegram Bot credentials
 	token := os.Getenv("BOT_TOKEN")
 	if token == "" {
 		return nil, fmt.Errorf("BOT_TOKEN is required")
@@ -30,6 +33,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("valid ADMIN_ID is required")
 	}
 
+	// Optional: Scanner behavior (with defaults)
 	pollInterval := 15
 	if pi := os.Getenv("POLL_INTERVAL"); pi != "" {
 		if val, err := strconv.Atoi(pi); err == nil {
@@ -44,11 +48,13 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Blockchain constants
 	contract := os.Getenv("USDT_CONTRACT")
 	if contract == "" {
 		contract = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 	}
 
+	// Database connections (PostgreSQL & Redis)
 	pgDSN := os.Getenv("PG_DSN")
 	if pgDSN == "" {
 		pgDSN = "host=localhost user=postgres password=postgres dbname=tron_db port=5432 sslmode=disable TimeZone=Europe/Warsaw"
