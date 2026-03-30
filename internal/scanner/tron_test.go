@@ -5,10 +5,11 @@ import (
 	"testing"
 )
 
+// Test USDT amount parsing (Sun to USDT conversion)
 func TestParseAmount(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    string
+		input    string // Raw value from Tron network
 		expected float64
 	}{
 		{"1 USDT", "1000000", 1.0},
@@ -28,6 +29,7 @@ func TestParseAmount(t *testing.T) {
 	}
 }
 
+// Test HTML notification message building
 func TestFormatNotification(t *testing.T) {
 	const (
 		wallet = "TWDJL7p1234"
@@ -39,18 +41,22 @@ func TestFormatNotification(t *testing.T) {
 
 	msg := FormatNotification(wallet, sender, amount, ts, txID)
 
+	// Verify amount formatting
 	if !strings.Contains(msg, "150.35 USDT") {
 		t.Error("Message does not contain the correct amount")
 	}
 
+	// Verify wallet address truncation (security/privacy)
 	if !strings.Contains(msg, "1234") || !strings.Contains(msg, "6543") {
 		t.Error("Message does not contain wallet address tails")
 	}
 
+	// Verify transaction ID inclusion
 	if !strings.Contains(msg, txID) {
 		t.Error("Message does not contain the transaction link")
 	}
 
+	// Verify HTML styling for Telegram
 	if !strings.Contains(msg, "<b>") || !strings.Contains(msg, "<code>") {
 		t.Error("Message does not contain expected HTML tags")
 	}

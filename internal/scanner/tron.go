@@ -13,12 +13,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// Store defines database operations required by the scanner
 type Store interface {
 	GetWallets() ([]storage.TrackedWallet, error)
 	UpdateWalletTimestamp(address string, timestamp int64) error
 	ProcessTransaction(ctx context.Context, txID, address string) (bool, error)
 }
 
+// Scanner monitors the Tron blockchain for USDT transfers
 type Scanner struct {
 	cfg        *config.Config
 	db         Store
@@ -29,6 +31,7 @@ type Scanner struct {
 	notifyFunc func(msg string)
 }
 
+// New initializes a new blockchain scanner
 func New(cfg *config.Config, db Store, logger *zap.SugaredLogger) *Scanner {
 	return &Scanner{
 		cfg:       cfg,
@@ -39,12 +42,16 @@ func New(cfg *config.Config, db Store, logger *zap.SugaredLogger) *Scanner {
 	}
 }
 
+// --- Data Formatting Helpers ---
+
+// ParseAmount converts raw Sun (10^-6) string to float64 USDT
 func ParseAmount(raw string) float64 {
 	var amount float64
 	fmt.Sscanf(raw, "%f", &amount)
 	return amount / 1_000_000
 }
 
+// FormatNotification prepares an HTML message for Telegram
 func FormatNotification(address, from string, amount float64, timestamp int64, txID string) string {
 	loc, _ := time.LoadLocation("Europe/Warsaw")
 	t := time.UnixMilli(timestamp).In(loc)
@@ -68,6 +75,8 @@ func FormatNotification(address, from string, amount float64, timestamp int64, t
 		addrTail, fromTail, amount, timeStr, txID)
 }
 
+// --- Lifecycle & Status ---
+
 func (s *Scanner) SetNotifier(f func(string)) {
 	s.notifyFunc = f
 }
@@ -84,6 +93,7 @@ func (s *Scanner) IsRunning() bool {
 	return s.isRunning
 }
 
+// Start kicks off the background polling loop
 func (s *Scanner) Start(ctx context.Context) {
 	ticker := time.NewTicker(time.Duration(s.cfg.PollInterval) * time.Second)
 	defer ticker.Stop()
@@ -102,6 +112,9 @@ func (s *Scanner) Start(ctx context.Context) {
 	}
 }
 
+// --- Core Logic ---
+
+// processWallets iterates through tracked addresses using concurrency
 func (s *Scanner) processWallets(ctx context.Context) {
 	wallets, err := s.db.GetWallets()
 	if err != nil || len(wallets) == 0 {
@@ -109,7 +122,7 @@ func (s *Scanner) processWallets(ctx context.Context) {
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, s.cfg.MaxConcurrentScans)
+	sem := make(chan struct{}, s.cfg.MaxConcurrentScans) // Concurrency limit
 
 	for _, w := range wallets {
 		if ctx.Err() != nil {
@@ -127,6 +140,7 @@ func (s *Scanner) processWallets(ctx context.Context) {
 				return
 			}
 
+			// Initialize timestamp for new wallets (last 24h)
 			if wallet.LastTimestamp == 0 {
 				wallet.LastTimestamp = time.Now().Add(-24 * time.Hour).UnixMilli()
 				s.db.UpdateWalletTimestamp(wallet.Address, wallet.LastTimestamp)
@@ -139,6 +153,7 @@ func (s *Scanner) processWallets(ctx context.Context) {
 	wg.Wait()
 }
 
+// fetchAndProcessTransactions calls TronGrid API and handles new transfers
 func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.TrackedWallet) {
 	url := fmt.Sprintf("https://api.trongrid.io/v1/accounts/%s/transactions/trc20?limit=50&contract_address=%s&only_to=true&min_timestamp=%d",
 		w.Address, s.cfg.USDTContract, w.LastTimestamp)
@@ -146,6 +161,7 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 	var resp *http.Response
 	var err error
 
+	// Retry logic for API rate limits and network errors
 	maxRetries := 3
 	baseDelay := 1 * time.Second
 
@@ -162,6 +178,7 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 			break
 		}
 
+		// Error handling and backoff
 		if resp != nil {
 			resp.Body.Close()
 			if resp.StatusCode == 403 || resp.StatusCode == 429 {
@@ -178,12 +195,13 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 			return
 		}
 
-		delay := baseDelay * time.Duration(1<<attempt)
+		delay := baseDelay * time.Duration(1<<attempt) // Exponential backoff
 		time.Sleep(delay)
 	}
 
 	defer resp.Body.Close()
 
+	// Parse JSON response structure
 	var result struct {
 		Success bool `json:"success"`
 		Data    []struct {
@@ -201,9 +219,11 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 
 	var maxTimestamp int64 = w.LastTimestamp
 
+	// Process transactions from oldest to newest
 	for i := len(result.Data) - 1; i >= 0; i-- {
 		tx := result.Data[i]
 
+		// Check if transaction was already processed (Redis cache)
 		isNew, err := s.db.ProcessTransaction(ctx, tx.TransactionID, w.Address)
 		if err != nil {
 			s.logger.Errorf("Redis error: %v", err)
@@ -216,6 +236,7 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 		amount := ParseAmount(tx.Value)
 		msg := FormatNotification(w.Address, tx.From, amount, tx.BlockTimestamp, tx.TransactionID)
 
+		// Async notification delivery
 		if s.notifyFunc != nil {
 			go s.notifyFunc(msg)
 		}
@@ -225,9 +246,11 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 		}
 	}
 
+	// Update bookmark for next poll
 	if maxTimestamp > w.LastTimestamp {
 		s.db.UpdateWalletTimestamp(w.Address, maxTimestamp)
 	}
 
+	// Small pause to prevent hitting rate limits too fast
 	time.Sleep(250 * time.Millisecond)
 }
