@@ -142,8 +142,10 @@ func (s *Scanner) processWallets(ctx context.Context) {
 
 			// Initialize timestamp for new wallets (last 24h)
 			if wallet.LastTimestamp == 0 {
-				wallet.LastTimestamp = time.Now().Add(-24 * time.Hour).UnixMilli()
+				// Start scanning from the current moment to avoid spamming historical transactions
+				wallet.LastTimestamp = time.Now().UnixMilli()
 				s.db.UpdateWalletTimestamp(wallet.Address, wallet.LastTimestamp)
+				s.logger.Infof("New wallet initialized: %s (starting from now)", wallet.Address)
 			}
 
 			s.fetchAndProcessTransactions(ctx, wallet)
