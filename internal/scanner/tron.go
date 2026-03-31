@@ -142,10 +142,9 @@ func (s *Scanner) processWallets(ctx context.Context) {
 
 			// Initialize timestamp for new wallets (last 24h)
 			if wallet.LastTimestamp == 0 {
-				// Start scanning from the current moment to avoid spamming historical transactions
 				wallet.LastTimestamp = time.Now().UnixMilli()
 				s.db.UpdateWalletTimestamp(wallet.Address, wallet.LastTimestamp)
-				s.logger.Infof("New wallet initialized: %s (starting from now)", wallet.Address)
+				s.logger.Infof("New wallet initialized: %s (tracking from now)", wallet.Address)
 			}
 
 			s.fetchAndProcessTransactions(ctx, wallet)
@@ -186,10 +185,10 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 			if resp.StatusCode == 403 || resp.StatusCode == 429 {
 				s.logger.Warnf("Rate limit exceeded for %s (Attempt %d/%d)", w.Address, attempt+1, maxRetries+1)
 			} else {
-				s.logger.Warnf("API returned status %d (Attempt %d/%d)", resp.StatusCode, attempt+1, maxRetries+1)
+				s.logger.Warnf("API returned status %d for %s (Attempt %d/%d)", resp.StatusCode, w.Address, attempt+1, maxRetries+1)
 			}
 		} else {
-			s.logger.Warnf("HTTP error: %v (Attempt %d/%d)", err, attempt+1, maxRetries+1)
+			s.logger.Warnf("HTTP error for %s: %v (Attempt %d/%d)", w.Address, err, attempt+1, maxRetries+1)
 		}
 
 		if attempt == maxRetries {
@@ -212,10 +211,19 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 			Value          string `json:"value"`
 			BlockTimestamp int64  `json:"block_timestamp"`
 		} `json:"data"`
+		Meta struct {
+			At int64 `json:"at"`
+		} `json:"meta"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || !result.Success {
-		s.logger.Errorf("Failed to decode JSON: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		s.logger.Errorf("Failed to decode API response for %s: %v", w.Address, err)
+		return
+	}
+
+	// Log specific API failure if Success flag is false
+	if !result.Success {
+		s.logger.Errorf("TronGrid API reported failure for wallet %s (Request at: %d)", w.Address, result.Meta.At)
 		return
 	}
 
@@ -228,7 +236,7 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 		// Check if transaction was already processed (Redis cache)
 		isNew, err := s.db.ProcessTransaction(ctx, tx.TransactionID, w.Address)
 		if err != nil {
-			s.logger.Errorf("Redis error: %v", err)
+			s.logger.Errorf("Redis error for %s: %v", tx.TransactionID, err)
 			continue
 		}
 		if !isNew {
