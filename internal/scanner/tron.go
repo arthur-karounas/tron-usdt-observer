@@ -29,16 +29,24 @@ type Scanner struct {
 	isRunning  bool
 	runMutex   sync.RWMutex
 	notifyFunc func(msg string)
+
+	// Internal parameters to allow easy manipulation in tests
+	apiBaseURL string
+	retryDelay time.Duration
+	apiPause   time.Duration
 }
 
 // New initializes a new blockchain scanner
 func New(cfg *config.Config, db Store, logger *zap.SugaredLogger) *Scanner {
 	return &Scanner{
-		cfg:       cfg,
-		db:        db,
-		logger:    logger,
-		client:    &http.Client{Timeout: 5 * time.Second},
-		isRunning: true,
+		cfg:        cfg,
+		db:         db,
+		logger:     logger,
+		client:     &http.Client{Timeout: 5 * time.Second},
+		isRunning:  true,
+		apiBaseURL: "https://api.trongrid.io",
+		retryDelay: 1 * time.Second,
+		apiPause:   250 * time.Millisecond,
 	}
 }
 
@@ -156,15 +164,15 @@ func (s *Scanner) processWallets(ctx context.Context) {
 
 // fetchAndProcessTransactions calls TronGrid API and handles new transfers
 func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.TrackedWallet) {
-	url := fmt.Sprintf("https://api.trongrid.io/v1/accounts/%s/transactions/trc20?limit=50&contract_address=%s&only_to=true&min_timestamp=%d",
-		w.Address, s.cfg.USDTContract, w.LastTimestamp)
+	url := fmt.Sprintf("%s/v1/accounts/%s/transactions/trc20?limit=50&contract_address=%s&only_to=true&min_timestamp=%d",
+		s.apiBaseURL, w.Address, s.cfg.USDTContract, w.LastTimestamp)
 
 	var resp *http.Response
 	var err error
 
 	// Retry logic for API rate limits and network errors
 	maxRetries := 3
-	baseDelay := 1 * time.Second
+	baseDelay := s.retryDelay
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -262,5 +270,5 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 	}
 
 	// Small pause to prevent hitting rate limits too fast
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(s.apiPause)
 }
