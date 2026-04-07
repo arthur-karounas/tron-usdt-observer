@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
+	"github.com/arthur-karounas/tron-usdt-observer/internal/obs"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,7 @@ type Scanner struct {
 	isRunning  bool
 	runMutex   sync.RWMutex
 	notifyFunc func(msg string)
+	metrics    *obs.Metrics
 
 	// Internal parameters to allow easy manipulation in tests
 	apiBaseURL string
@@ -37,17 +39,21 @@ type Scanner struct {
 }
 
 // New initializes a new blockchain scanner
-func New(cfg *config.Config, db Store, logger *zap.SugaredLogger) *Scanner {
-	return &Scanner{
+func New(cfg *config.Config, db Store, logger *zap.SugaredLogger, metrics *obs.Metrics) *Scanner {
+	s := &Scanner{
 		cfg:        cfg,
 		db:         db,
 		logger:     logger,
 		client:     &http.Client{Timeout: 5 * time.Second},
 		isRunning:  true,
+		metrics:    metrics,
 		apiBaseURL: "https://api.trongrid.io",
 		retryDelay: 1 * time.Second,
 		apiPause:   250 * time.Millisecond,
 	}
+
+	s.metrics.ScannerStatus.Set(1)
+	return s
 }
 
 // --- Data Formatting Helpers ---
@@ -93,6 +99,11 @@ func (s *Scanner) SetRunning(state bool) {
 	s.runMutex.Lock()
 	defer s.runMutex.Unlock()
 	s.isRunning = state
+	if state {
+		s.metrics.ScannerStatus.Set(1)
+	} else {
+		s.metrics.ScannerStatus.Set(0)
+	}
 }
 
 func (s *Scanner) IsRunning() bool {
@@ -125,7 +136,13 @@ func (s *Scanner) Start(ctx context.Context) {
 // processWallets iterates through tracked addresses using concurrency
 func (s *Scanner) processWallets(ctx context.Context) {
 	wallets, err := s.db.GetWallets()
-	if err != nil || len(wallets) == 0 {
+	if err != nil {
+		s.metrics.ScanErrorsTotal.WithLabelValues("db_get_wallets").Inc()
+		return
+	}
+	s.metrics.TrackedWallets.Set(float64(len(wallets)))
+
+	if len(wallets) == 0 {
 		return
 	}
 
@@ -155,7 +172,9 @@ func (s *Scanner) processWallets(ctx context.Context) {
 				s.logger.Infof("New wallet initialized: %s (tracking from now)", wallet.Address)
 			}
 
+			start := time.Now()
 			s.fetchAndProcessTransactions(ctx, wallet)
+			s.metrics.ScanDuration.WithLabelValues(wallet.Address).Observe(time.Since(start).Seconds())
 		}(w)
 	}
 
@@ -189,18 +208,22 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 
 		// Error handling and backoff
 		if resp != nil {
-			resp.Body.Close()
+			defer resp.Body.Close()
 			if resp.StatusCode == 403 || resp.StatusCode == 429 {
 				s.logger.Warnf("Rate limit exceeded for %s (Attempt %d/%d)", w.Address, attempt+1, maxRetries+1)
+				s.metrics.ScanErrorsTotal.WithLabelValues(fmt.Sprintf("http_%d", resp.StatusCode)).Inc()
 			} else {
 				s.logger.Warnf("API returned status %d for %s (Attempt %d/%d)", resp.StatusCode, w.Address, attempt+1, maxRetries+1)
+				s.metrics.ScanErrorsTotal.WithLabelValues(fmt.Sprintf("http_%d", resp.StatusCode)).Inc()
 			}
 		} else {
 			s.logger.Warnf("HTTP error for %s: %v (Attempt %d/%d)", w.Address, err, attempt+1, maxRetries+1)
+			s.metrics.ScanErrorsTotal.WithLabelValues("http_request").Inc()
 		}
 
 		if attempt == maxRetries {
 			s.logger.Errorf("Failed to fetch transactions for %s after %d attempts", w.Address, maxRetries+1)
+			s.metrics.ScansTotal.WithLabelValues("error").Inc()
 			return
 		}
 
@@ -226,15 +249,18 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		s.logger.Errorf("Failed to decode API response for %s: %v", w.Address, err)
+		s.metrics.ScanErrorsTotal.WithLabelValues("json_decode").Inc()
 		return
 	}
 
 	// Log specific API failure if Success flag is false
 	if !result.Success {
 		s.logger.Errorf("TronGrid API reported failure for wallet %s (Request at: %d)", w.Address, result.Meta.At)
+		s.metrics.ScanErrorsTotal.WithLabelValues("api_success_false").Inc()
 		return
 	}
 
+	s.metrics.ScansTotal.WithLabelValues("success").Inc()
 	var maxTimestamp int64 = w.LastTimestamp
 
 	// Process transactions from oldest to newest
@@ -245,12 +271,14 @@ func (s *Scanner) fetchAndProcessTransactions(ctx context.Context, w storage.Tra
 		isNew, err := s.db.ProcessTransaction(ctx, tx.TransactionID, w.Address)
 		if err != nil {
 			s.logger.Errorf("Redis error for %s: %v", tx.TransactionID, err)
+			s.metrics.ScanErrorsTotal.WithLabelValues("redis_error").Inc()
 			continue
 		}
 		if !isNew {
 			continue
 		}
 
+		s.metrics.TransactionsFound.WithLabelValues(w.Address).Inc()
 		amount := ParseAmount(tx.Value)
 		msg := FormatNotification(w.Address, tx.From, amount, tx.BlockTimestamp, tx.TransactionID)
 
