@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
+	"github.com/arthur-karounas/tron-usdt-observer/internal/obs"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -107,7 +108,10 @@ func TestScanner_ProcessWallets_Success(t *testing.T) {
 			{Address: "TOldWallet", LastTimestamp: 100},
 		},
 	}
-	s := New(cfg, db, zap.NewNop().Sugar())
+
+	// Use NewTestMetrics to avoid global registration conflicts
+	metrics := obs.NewTestMetrics()
+	s := New(cfg, db, zap.NewNop().Sugar(), metrics)
 
 	s.retryDelay = 1 * time.Microsecond
 	s.apiPause = 1 * time.Microsecond
@@ -161,7 +165,9 @@ func TestScanner_ProcessWallets_Success(t *testing.T) {
 
 // Test scanner state management and notifier setup
 func TestScanner_Lifecycle(t *testing.T) {
-	s := New(&config.Config{}, &mockStore{}, zap.NewNop().Sugar())
+	// Use NewTestMetrics to avoid global registration conflicts
+	metrics := obs.NewTestMetrics()
+	s := New(&config.Config{}, &mockStore{}, zap.NewNop().Sugar(), metrics)
 
 	assert.True(t, s.IsRunning())
 
