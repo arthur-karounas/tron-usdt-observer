@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/arthur-karounas/tron-usdt-observer/internal/config"
+	"github.com/arthur-karounas/tron-usdt-observer/internal/obs"
 	"github.com/arthur-karounas/tron-usdt-observer/internal/storage"
 	"go.uber.org/zap"
 	tele "gopkg.in/telebot.v3"
@@ -33,10 +34,11 @@ type Bot struct {
 	scanner ScannerController
 	logger  *zap.SugaredLogger
 	cfg     *config.Config
+	metrics *obs.Metrics
 }
 
 // New creates and configures a new Bot instance
-func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.SugaredLogger) (*Bot, error) {
+func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.SugaredLogger, metrics *obs.Metrics) (*Bot, error) {
 	pref := tele.Settings{
 		Token:  cfg.BotToken,
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
@@ -47,7 +49,7 @@ func New(cfg *config.Config, db Store, scn ScannerController, logger *zap.Sugare
 		return nil, err
 	}
 
-	botInst := &Bot{b: b, db: db, scanner: scn, logger: logger, cfg: cfg}
+	botInst := &Bot{b: b, db: db, scanner: scn, logger: logger, cfg: cfg, metrics: metrics}
 	botInst.setupHandlers()
 
 	return botInst, nil
@@ -76,6 +78,9 @@ func (bot *Bot) SendNotification(msg string) {
 		_, err := bot.b.Send(user, msg, tele.ModeHTML, tele.NoPreview)
 		if err != nil {
 			bot.logger.Errorf("Failed to send notification to %d: %v", userID, err)
+			bot.metrics.NotificationsSent.WithLabelValues("error").Inc()
+		} else {
+			bot.metrics.NotificationsSent.WithLabelValues("success").Inc()
 		}
 	}
 }
@@ -86,6 +91,9 @@ func (bot *Bot) adminOnly(next tele.HandlerFunc) tele.HandlerFunc {
 		if c.Sender().ID != bot.cfg.AdminID {
 			return nil
 		}
+
+		// Track command usage for observability
+		bot.metrics.BotCommandsTotal.WithLabelValues(c.Message().Text).Inc()
 		return next(c)
 	}
 }
