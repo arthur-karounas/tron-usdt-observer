@@ -1,32 +1,29 @@
 [🇺🇸 English](#english) | [🇷🇺 Русский](#русский)
 
 <a name="english"></a>
-# 📥 TRON USDT Observer (Enterprise Lite)
+# 📥 TRON USDT Observer
 
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go) 
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)
-![Security](https://img.shields.io/badge/Security-High-red)
+![Security](https://img.shields.io/badge/Security-Non--Custodial-blue)
 
-The professional standard for TRC-20 asset surveillance.
+A backend service for monitoring incoming TRC-20 (USDT) transactions on the TRON network.
 
-This is a sanitized, open-source distribution of a high-performance monitoring system originally developed for institutional asset management under a private contract. It is designed for environments where reliability, data integrity, and strict access control are non-negotiable.
+This project is a simplified and sanitized version of a system originally developed as part of a contract engagement. It focuses on reliable transaction monitoring, data consistency, and real-time notifications.
 
-## 🧊 Enterprise Origin & Sanitization
+## 🧊 Project Background & Sanitization
 
-This repository contains a lightweight version of a proprietary monitoring engine. The core logic has been extracted, audited for security, and decoupled from internal corporate APIs.
+This repository contains a simplified version of the original system.
 
-**Key differences from the proprietary version:**
-
-* Removed integration mechanisms with the client's internal accounting systems.
-* Replaced internal authentication services with a robust Telegram-based middleware.
+Some integrations and internal components were removed, and the project was adapted for open-source use.
 
 ## 🛡️ Core Principles & Security
 
 * **Non-Custodial Monitoring:** The service works exclusively with public addresses. Private keys are not used, eliminating any risk to assets
 * **Access Control Middleware:** Bot management and notification delivery are restricted via Telegram ID filtering (Admin-only)
 * **Transaction Deduplication:** Using Redis (SetNX) ensures exactly one notification is sent per transaction, preventing duplicates
-* **Rate-Limit Protection:** Smart retry logic when interacting with the TronGrid API
+* **Rate-Limit Protection:** Retry logic when interacting with the TronGrid API
 
 ## 🛠 Tech Stack
 
@@ -38,10 +35,21 @@ This repository contains a lightweight version of a proprietary monitoring engin
 * **Logging:** Zap
 
 ## 📊 Monitoring & Observability
-The service is equipped with a professional monitoring stack to track engine health in real-time:
+
+The service includes a monitoring stack to track system health in real-time:
 
 * **Prometheus Metrics:** Native instrumentation for tracking transaction throughput, API latency, and error rates.
 * **Grafana Dashboard:** Pre-configured visual dashboards for instant health snapshots.
+
+## 🏗 Architecture Overview
+
+The system processes transactions as follows:
+
+1. A scanner continuously polls TRON wallets using the TronGrid API
+2. Transactions are processed concurrently using a worker pool
+3. Redis is used to check and prevent duplicate transaction processing
+4. Valid transactions are stored in PostgreSQL
+5. Notifications are sent via Telegram bot
 
 ## 📦 Quick Start
 
@@ -90,12 +98,13 @@ Once the system is running, you can access the monitoring interfaces:
 * `/add_user <id>` - Grant notification access to another user
 * `/del_user <id>` - Revoke notification access from a user
 
-## 🏗 Architecture
+## 🏗 Project Structure
 
 * `cmd/bot` - Initialization and startup
 * `internal/scanner` - Core: concurrent blockchain scanning
 * `internal/storage` - Data layer (Postgres + Redis)
 * `internal/bot` - Telegram interface logic
+* `internal/obs` - Metrics for observability
 
 ## 🌟 Contributing & Roadmap
 
@@ -111,41 +120,50 @@ This project is licensed under the **MIT** License.
 ---
 
 <a name="русский"></a>
-# 📥 TRON USDT Observer (Enterprise Lite)
+# 📥 TRON USDT Observer 
 
-Профессиональный стандарт мониторинга активов TRC-20.
+Сервис на backend для мониторинга входящих TRC-20 (USDT) транзакций в сети TRON.
 
-Данный проект представляет собой очищенную (sanitized) open-source версию высокопроизводительной системы мониторинга, изначально разработанной для институционального управления активами в рамках частного контракта. Система предназначена для условий, в которых надежность, целостность данных и строгий контроль доступа являются критически важными.
+Данный проект представляет собой упрощённую и очищенную версию системы, разработанной в рамках контрактной работы. Основной фокус - надёжный мониторинг транзакций, целостность данных и отправка уведомлений в реальном времени.
 
-## 🧊 Происхождение и очистка кода
 
-В данном репозитории представлена облегченная версия проприетарного движка мониторинга. Основная логика была выделена в этот модуль, прошла аудит безопасности и была отвязана от внутренних корпоративных API.
+## 🧊 Происхождение проекта и очистка
 
-**Ключевые отличия от оригинальной версии:**
-* Удалены механизмы интеграции со внутренними системами учёта заказчика.
-* Внутренние сервисы аутентификации заменены на надежное Middleware-решение на базе Telegram.
+В данном репозитории представлена упрощённая версия исходной системы.
+
+Некоторые интеграции и внутренние компоненты были удалены, а проект адаптирован для публикации в open-source.
 
 ## 🛡️ Принципы работы и Безопасность
 
-* **Non-Custodial Monitoring:** Сервис работает исключительно с публичными адресами. Приватные ключи не используются, что исключает риск для активов
-* **Access Control Middleware:** Управление ботом и получение уведомлений ограничено через фильтрацию по Telegram ID (Admin-only)
-* **Transaction Deduplication:** Использование Redis (SetNX) гарантирует, что на каждую транзакцию придет ровно одно уведомление
-* **Rate-Limit Protection:** Умная логика ретраев при взаимодействии с TronGrid API
+* **Non-Custodial Monitoring:** Сервис работает только с публичными адресами. Приватные ключи не используются, что исключает риск для средств
+* **Контроль доступа:** Управление ботом и получение уведомлений ограничены через фильтрацию по Telegram ID (только для администратора)
+* **Дедупликация транзакций:** Использование Redis (SetNX) гарантирует, что каждая транзакция обрабатывается только один раз
+* **Защита от лимитов API:** Реализована логика повторных попыток при работе с TronGrid API
 
 ## 🛠 Технологический стек
 
-* **Language:** Go
-* **Database:** PostgreSQL
-* **Cache:** Redis
-* **Infrastructure:** Docker & Docker Compose
-* **Observability:** Prometheus, Grafana
-* **Logging:** Zap
+* **Язык:** Go
+* **База данных:** PostgreSQL
+* **Кэш:** Redis
+* **Инфраструктура:** Docker и Docker Compose
+* **Мониторинг:** Prometheus, Grafana
+* **Логирование:** Zap
 
 ## 📊 Мониторинг и метрики
-Сервис оснащен профессиональным стеком мониторинга для отслеживания состояния системы в реальном времени:
+Сервис включает стек мониторинга для отслеживания состояния системы в реальном времени:
 
-* **Prometheus Metrics:** Нативная интеграция для отслеживания пропускной способности (TPS), задержек API и частоты ошибок.
-* **Grafana Dashboard:** Предустановленные дашборды для визуального контроля ключевых показателей.
+* **Метрики Prometheus:** Отслеживание пропускной способности, задержек API и количества ошибок
+* **Дашборды Grafana:** Визуализация ключевых метрик системы
+
+## 🏗 Архитектура
+
+Система работает следующим образом:
+
+1. Сканер регулярно опрашивает кошельки TRON через TronGrid API
+2. Транзакции обрабатываются параллельно с использованием пула воркеров
+3. Redis используется для проверки и предотвращения повторной обработки транзакций
+4. Валидные транзакции сохраняются в PostgreSQL
+5. Уведомления отправляются через Telegram-бота
 
 ## 📦 Быстрый старт
 
@@ -195,12 +213,13 @@ go test ./...
 * `/add_user <id>` - Разрешить доступ к уведомлениям другому сотруднику
 * `/del_user <id>` - Забрать доступ к уведомлениям у сотрудника
 
-## 🏗 Архитектура
+## 🏗 Структура проекта
 
 * `cmd/bot` - Инициализация и запуск
 * `internal/scanner` - Ядро: конкурентное сканирование блокчейна
 * `internal/storage` - Слой данных (Postgres + Redis)
 * `internal/bot` - Логика Telegram-интерфейса
+* `internal/obs` - Определение метрик для observability
 
 ## 🌟 Contributing & Roadmap
 
